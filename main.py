@@ -7,11 +7,17 @@ import pymysql
 from sqlalchemy import create_engine, text
 import json
 
-user_question = 'Which machine was down for the longest this week and how long in total?'
+user_question = 'How many instances of Coolant Leakage in the last week?'
 
+# Which machine was down for the longest last last week and how long in total?
 # What was the last machine to have belt misalignment?
 # Which shift produced the most number of parts today?
 # Which machine was down for the longest this week and how long in total?
+# Which shift produced the most parts last week? What was the date? - change one units_produced to 245 or somet, as all others are 240
+# How many instances of Coolant Leakage in the last week?
+
+# Not working: 
+# Which shift in a particular day produced the most parts last week?
 
 # Database connection details
 with open("db_config.json", "r") as file:
