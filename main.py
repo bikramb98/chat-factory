@@ -17,6 +17,7 @@ import openai
 import fitz
 import faiss
 import numpy as np
+from openai import OpenAI
 
 #TODO: Classify user question to either query SQL or RAG
 
@@ -159,18 +160,46 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 # Load PDF files and extract text
 documents = []
+document_mappings = {}  # Store which chunks belong to which machine
+metadata_store = []  # Stores metadata (machine type) corresponding to each embedding
+chunk_registry = {}
+chunk_counter = 0
+
+machine_names = {
+    "cnc_guide.pdf": "CNC Lathe-1000",
+    "hydraulic_press_guide.pdf": "Hydraulic Press-200",
+    "laser_cutter_guide.pdf": "Laser Cutter-X5"
+}
+
 pdf_folder = "machine_manuals"  # Change this to the folder containing PDFs
+# for file in os.listdir(pdf_folder):
+#     if file.endswith(".pdf"):
+#         pdf_path = os.path.join(pdf_folder, file)
+#         extracted_text = extract_text_from_pdf(pdf_path)
+#         chunks = text_splitter.split_text(extracted_text)
+#         documents.extend(chunks)
+
 for file in os.listdir(pdf_folder):
     if file.endswith(".pdf"):
+        machine_type = machine_names.get(file)  # Get machine type from filename
         pdf_path = os.path.join(pdf_folder, file)
+        
         extracted_text = extract_text_from_pdf(pdf_path)
-        chunks = text_splitter.split_text(extracted_text)
-        documents.extend(chunks)
+        text_chunks = extracted_text.split("\n\n")  # Basic chunking
+        
+        for chunk in text_chunks:
+            documents.append(chunk)
+            document_mappings[len(metadata_store)] = machine_type  # Store chunk index with machine type
+            metadata_store.append(machine_type)
 
 # Step 3: Convert documents into embeddings
 embedding_model = OpenAIEmbeddings()
 embeddings = [embedding_model.embed_query(chunk) for chunk in documents]
 embeddings = np.array(embeddings, dtype="float32")
+
+# Step 3: Convert documents into embeddings and store them
+# embeddings = np.array([embedding_model.encode(doc) for doc in documents], dtype="float32")
+# index.add(embeddings)
 
 # Step 4: Store embeddings in FAISS index
 d = embeddings.shape[1]  # Vector dimension
@@ -178,67 +207,118 @@ index = faiss.IndexFlatL2(d)
 index.add(embeddings)
 
 # Step 5: Query Processing & Retrieval
-def retrieve_relevant_docs(query, k=3):
+def retrieve_relevant_docs(query, machine_type, k=3):
     query_embedding = embedding_model.embed_query(query)
     query_embedding = np.array([query_embedding], dtype="float32")
     distances, indices = index.search(query_embedding, k)
-    retrieved_docs = [documents[i] for i in indices[0]]
-    return retrieved_docs
+    filtered_results = []
+    for i in indices[0]:
+        print(document_mappings[i])
+        if document_mappings[i] == machine_type:
+            filtered_results.append(documents[i])
+        if len(filtered_results) >= k:
+            break  # Stop once we have enough filtered results
+    
+    return filtered_results
+    # retrieved_docs = [documents[i] for i in indices[0]]
+    # return retrieved_docs
 
-# Step 6: Pass Retrieved Context to LLM
-def generate_answer_with_rag(query):
+# def retrieve_relevant_docs(query, machine_type, k=3):
+#     query_embedding = np.array([embedding_model.encode(query)], dtype="float32")
+#     distances, indices = index.search(query_embedding, k * 2)  # Retrieve more to filter
+    
+#     filtered_results = []
+#     for i in indices[0]:
+#         if document_mappings[i] == machine_type:
+#             filtered_results.append(documents[i])
+#         if len(filtered_results) >= k:
+#             break  # Stop once we have enough filtered results
+    
+    # return filtered_results
+
+# # Step 6: Pass Retrieved Context to LLM
+# def generate_answer_with_rag(query, machine_type):
 
 
-    retrieved_docs = retrieve_relevant_docs(query)
+#     retrieved_docs = retrieve_relevant_docs(query, machine_type)
+#     context = "\n".join(retrieved_docs)
+
+#     print(f"context retireved is {context}")
+#     prompt = f"""
+#     You are a manufacturing troubleshooting assistant. 
+#     Use the following extracted document content to answer the user query:
+
+#     Machine: {machine_type}
+    
+#     Context: {context}
+    
+#     User Query: {query}
+    
+#     Provide a clear, step-by-step answer in English:
+#     """
+#     # response = openai.ChatCompletion.create(
+#     #     model="gpt-4",
+#     #     messages=[{"role": "system", "content": "You are an expert in troubleshooting manufacturing machines."},
+#     #               {"role": "user", "content": prompt}]
+#     # )
+
+
+#     #####
+#     full_response = ""
+
+#     for message in llama_client.chat_completion(
+#         messages=[
+#                   {"role": "user", "content": 'hi who are you?'}],
+#         max_tokens=500,
+#         stream=True):
+
+#         # print(message.choices[0].delta.content)
+
+#         if message.choices[0].delta.content is not None:  # Add this check
+#             full_response += message.choices[0].delta.content
+
+#         # content = message.choices[0].delta.content
+#         # full_response += content
+
+#     # print(full_response)
+
+#     return full_response
+
+#     #####
+#     # return response["choices"][0]["message"]["content"]
+
+openai_client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),  # This is the default and can be omitted
+)
+
+def generate_answer_with_rag(query, machine_type):
+    retrieved_docs = retrieve_relevant_docs(query, machine_type)
     context = "\n".join(retrieved_docs)
 
-    print(f"context retireved is {context}")
-    prompt = f"""
-    You are a manufacturing troubleshooting assistant. 
-    Use the following extracted document content to answer the user query:
-    
-    Context:
-    {context}
-    
-    User Query:
-    {query}
-    
-    Answer:
-    """
-    # response = openai.ChatCompletion.create(
-    #     model="gpt-4",
-    #     messages=[{"role": "system", "content": "You are an expert in troubleshooting manufacturing machines."},
-    #               {"role": "user", "content": prompt}]
-    # )
+    prompt = f"""Given this context about {machine_type}:
+{context}
 
+Question: {query}
 
-    #####
-    full_response = ""
+Provide a clear answer:"""
 
-    for message in llama_client.chat_completion(
-        messages=[{"role": "system", "content": "You are an expert in troubleshooting manufacturing machines."},
-                  {"role": "user", "content": prompt}],
-        max_tokens=500,
-        stream=True):
-
-        content = message.choices[0].delta.content
-        full_response += content
-
-    print(full_response)
-
-    return full_response
-
-
-    #####
-
-
-
-
-
-
-    # return response["choices"][0]["message"]["content"]
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert in troubleshooting manufacturing machines."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Error in generation: {e}")
+        return "Error generating response"
 
 # Example Query
-test_query = "My Laser Cutter has tool misalignment. What should I do?"
-answer = generate_answer_with_rag(test_query)
+test_query = "My Laser Cutter-X5 has tool misalignment. How to fix it?"
+machine_query = "Laser Cutter-X5"
+answer = generate_answer_with_rag(test_query, machine_query)
 print("\nGenerated Response:", answer)
