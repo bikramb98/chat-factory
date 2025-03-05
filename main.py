@@ -6,18 +6,34 @@ import re
 import pymysql
 from sqlalchemy import create_engine, text
 import json
+from langchain_openai import ChatOpenAI
+from langchain.agents import initialize_agent, Tool
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
 
-user_question = 'How many instances of Coolant Leakage in the last week?'
+user_question = 'Which machine downtime had the most impact on units produced last week?'
 
 # Which machine was down for the longest last last week and how long in total?
+# How long was each machine down this week/ last week?
 # What was the last machine to have belt misalignment?
 # Which shift produced the most number of parts today?
 # Which machine was down for the longest this week and how long in total?
 # Which shift produced the most parts last week? What was the date? - change one units_produced to 245 or somet, as all others are 240
 # How many instances of Coolant Leakage in the last week?
+# Which was the most frequently down machine last week?
+
+# Which machine downtime had the most impact on units produced last week?
+# The most impactful machine downtime on units produced last week was due to the machine named CNC Lathe-1000, which had a downtime duration of 120 minutes due to excessive vibration, affecting the production on 2023-10-02.
 
 # Not working: 
 # Which shift in a particular day produced the most parts last week?
+
+#TO try:
+# 
+#
+
+# Agents questions:
+
 
 # Database connection details
 with open("db_config.json", "r") as file:
@@ -88,7 +104,7 @@ if full_response != "":
     try:
         with engine.connect() as connection:
             result = connection.execute(sql_query)
-            row = result.fetchone()  # Fetch the first row
+            row = result.fetchall()  # Fetch the first row
             print(row)
 
     except Exception as e:
@@ -110,3 +126,161 @@ if full_response != "":
         full_response += content
 
     print(full_response)
+
+###############xxxxxxxxxxx###############
+
+# Function to fetch downtime records from SQL
+def fetch_machine_downtime(connection):
+    try:
+
+        query = text("""
+        SELECT machine_name, SUM(downtime_duration) as total_downtime
+        FROM machine_status_2
+        WHERE DATE(last_downtime) >= CURRENT_DATE - INTERVAL 7 DAY
+        AND DATE(last_downtime) <= CURRENT_DATE
+        GROUP BY machine_name
+        ORDER BY total_downtime DESC;
+        """)
+
+        # query = text(f"""
+        # SELECT machine_name, COUNT(*) as instance_count
+        # FROM machine_status_2
+        # WHERE issue_description = :issue_type 
+        #   AND last_downtime >= CURRENT_DATE - INTERVAL 7 DAY
+        # GROUP BY machine_name;
+        # """)
+        result = connection.execute(query)
+        data = result.fetchall()
+        
+        # cursor.close()
+        # conn.close()
+
+        print(f"Data is {data}")
+
+        return data if data else "No downtime records found this week."
+    
+
+
+    except Exception as e:
+        return f"Error fetching downtime data: {str(e)}"
+    
+    
+    
+# Function to analyze downtime impact on production
+def analyze_downtime_impact(connection):
+    downtime_data = fetch_machine_downtime(connection)
+
+    if isinstance(downtime_data, str):  # Error or no data
+        return downtime_data
+
+    impact_report = []
+
+    try:
+
+        # Get average production in the last 7 days
+        query_avg = text("""
+        SELECT AVG(units_produced) 
+        FROM production_log 
+        WHERE production_date >= CURRENT_DATE - INTERVAL 7 DAY
+        AND production_date <= CURRENT_DATE;
+
+        """)
+        result = connection.execute(query_avg)
+        avg_production = result.fetchone()[0] or 0  # Default to 0 if no data
+
+        for machine_name, total_downtime_minutes in downtime_data:
+            # Check production data for the last downtime period
+            # query_prod = text("""
+            # SELECT SUM(units_produced) 
+            # FROM production_log 
+            # WHERE production_date >= CURRENT_DATE - INTERVAL 7 DAY;
+            # """)
+
+            total_downtime_hours = total_downtime_minutes / 60
+
+            print(f"Machine name is --> {machine_name}")
+
+            query_prod = text(f"""
+            SELECT SUM(units_produced) 
+            FROM production_log 
+            WHERE production_date IN (
+                SELECT DISTINCT DATE(last_downtime) 
+                FROM machine_status_2 
+                WHERE machine_name = '{machine_name}' 
+                AND last_downtime >= CURRENT_DATE - INTERVAL 7 DAY
+            );
+            """)
+            actual_prod_data = connection.execute(query_prod)
+            actual_production = actual_prod_data.fetchone()[0] or 0
+
+            # Adjust production drop for this specific machine based on its downtime
+            adjusted_production = actual_production / (total_downtime_hours / 24) if total_downtime_hours > 0 else actual_production
+
+            production_drop = avg_production - adjusted_production
+            impact_report.append(
+                f"📅 Machine {machine_name} had {total_downtime_hours} hours of downtime this week. "
+                f"Production dropped by {production_drop:.2f} units."
+            )
+
+        # cursor.close()
+        # conn.close()
+
+    except Exception as e:
+        return f"Error analyzing production impact: {str(e)}"
+
+    return "\n".join(impact_report)
+
+
+llm = ChatOpenAI(model_name="gpt-4", temperature=0)
+
+explanation_prompt = PromptTemplate(
+    input_variables=["downtime_analysis"],
+    template="""
+    You are an AI assistant for factory operations. Analyze the following downtime report and provide structured insights.
+
+    Downtime Report:
+    {downtime_analysis}
+
+    Provide:
+    1. Summary of downtime issues.
+    2. Possible causes of downtime.
+    """
+
+    # 3. Recommended actions to prevent future downtime.
+)
+
+# Define the function to call the agent
+def explain_downtime(query: str, engine):
+
+    with engine.connect() as connection:
+
+        downtime_analysis = analyze_downtime_impact(connection)
+        response = llm.invoke(explanation_prompt.format(downtime_analysis=downtime_analysis))
+    return response
+
+# Define the agent tool
+downtime_tool = Tool(
+    name="Downtime Impact Analyzer",
+    func=lambda query: explain_downtime(query, engine),
+    description="Analyzes machine downtimes and their impact on production using live database data."
+)
+
+memory = ConversationBufferMemory(memory_key="chat_history")
+
+# Initialize the agent
+agent = initialize_agent(
+    tools=[downtime_tool],
+    llm=llm,
+    agent="zero-shot-react-description",
+    verbose=True,
+    memory=memory
+)
+
+
+# Function to handle agent-based queries
+def handle_agent_query(user_question):
+    return agent.run(user_question)
+
+handle_agent_query(user_question)
+
+##############xxxxxxxxxxx###############
