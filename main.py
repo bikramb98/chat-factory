@@ -10,8 +10,17 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import initialize_agent, Tool
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import openai
+import fitz
+import faiss
+import numpy as np
 
-user_question = 'Which machine downtime had the most impact on units produced last week?'
+#TODO: Classify user question to either query SQL or RAG
+
+user_question = 'Which machine was down for the longest this week and what was the downtime reason?'
 
 # Which machine was down for the longest last last week and how long in total?
 # How long was each machine down this week/ last week?
@@ -33,6 +42,7 @@ user_question = 'Which machine downtime had the most impact on units produced la
 #
 
 # Agents questions:
+# 'Which machine downtime had the most impact on units produced last week?'
 
 
 # Database connection details
@@ -64,10 +74,10 @@ load_dotenv(find_dotenv())
 
 HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
-# client = InferenceClient(
-#     "meta-llama/Meta-Llama-3-8B-Instruct",
-#     token=HUGGINGFACE_API_TOKEN,
-# )
+llama_client = InferenceClient(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    token=HUGGINGFACE_API_TOKEN,
+)
 
 client = InferenceClient(
     "Qwen/Qwen2.5-Coder-32B-Instruct",
@@ -127,160 +137,108 @@ if full_response != "":
 
     print(full_response)
 
-###############xxxxxxxxxxx###############
+###############xxxxxxxxxxx##############
 
-# Function to fetch downtime records from SQL
-def fetch_machine_downtime(connection):
-    try:
+# openai.api_key = os.getenv('OPENAIKEY')
 
-        query = text("""
-        SELECT machine_name, SUM(downtime_duration) as total_downtime
-        FROM machine_status_2
-        WHERE DATE(last_downtime) >= CURRENT_DATE - INTERVAL 7 DAY
-        AND DATE(last_downtime) <= CURRENT_DATE
-        GROUP BY machine_name
-        ORDER BY total_downtime DESC;
-        """)
+query = 'Why is tool misalignment in the laser cutter?'
 
-        # query = text(f"""
-        # SELECT machine_name, COUNT(*) as instance_count
-        # FROM machine_status_2
-        # WHERE issue_description = :issue_type 
-        #   AND last_downtime >= CURRENT_DATE - INTERVAL 7 DAY
-        # GROUP BY machine_name;
-        # """)
-        result = connection.execute(query)
-        data = result.fetchall()
-        
-        # cursor.close()
-        # conn.close()
+# Step 1: Load PDF and Extract Text
+def extract_text_from_pdf(pdf_path):
+    text = ""
+    with fitz.open(pdf_path) as doc:
+        for page in doc:
+            text += page.get_text("text") + "\n"
+    return text
 
-        print(f"Data is {data}")
+# Step 2: Chunk the text for better retrieval
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,  # Size of each chunk
+    chunk_overlap=100  # Overlapping for better context retention
+)
 
-        return data if data else "No downtime records found this week."
+# Load PDF files and extract text
+documents = []
+pdf_folder = "machine_manuals"  # Change this to the folder containing PDFs
+for file in os.listdir(pdf_folder):
+    if file.endswith(".pdf"):
+        pdf_path = os.path.join(pdf_folder, file)
+        extracted_text = extract_text_from_pdf(pdf_path)
+        chunks = text_splitter.split_text(extracted_text)
+        documents.extend(chunks)
+
+# Step 3: Convert documents into embeddings
+embedding_model = OpenAIEmbeddings()
+embeddings = [embedding_model.embed_query(chunk) for chunk in documents]
+embeddings = np.array(embeddings, dtype="float32")
+
+# Step 4: Store embeddings in FAISS index
+d = embeddings.shape[1]  # Vector dimension
+index = faiss.IndexFlatL2(d)
+index.add(embeddings)
+
+# Step 5: Query Processing & Retrieval
+def retrieve_relevant_docs(query, k=3):
+    query_embedding = embedding_model.embed_query(query)
+    query_embedding = np.array([query_embedding], dtype="float32")
+    distances, indices = index.search(query_embedding, k)
+    retrieved_docs = [documents[i] for i in indices[0]]
+    return retrieved_docs
+
+# Step 6: Pass Retrieved Context to LLM
+def generate_answer_with_rag(query):
+
+
+    retrieved_docs = retrieve_relevant_docs(query)
+    context = "\n".join(retrieved_docs)
+
+    print(f"context retireved is {context}")
+    prompt = f"""
+    You are a manufacturing troubleshooting assistant. 
+    Use the following extracted document content to answer the user query:
     
-
-
-    except Exception as e:
-        return f"Error fetching downtime data: {str(e)}"
+    Context:
+    {context}
     
+    User Query:
+    {query}
     
-    
-# Function to analyze downtime impact on production
-def analyze_downtime_impact(connection):
-    downtime_data = fetch_machine_downtime(connection)
-
-    if isinstance(downtime_data, str):  # Error or no data
-        return downtime_data
-
-    impact_report = []
-
-    try:
-
-        # Get average production in the last 7 days
-        query_avg = text("""
-        SELECT AVG(units_produced) 
-        FROM production_log 
-        WHERE production_date >= CURRENT_DATE - INTERVAL 7 DAY
-        AND production_date <= CURRENT_DATE;
-
-        """)
-        result = connection.execute(query_avg)
-        avg_production = result.fetchone()[0] or 0  # Default to 0 if no data
-
-        for machine_name, total_downtime_minutes in downtime_data:
-            # Check production data for the last downtime period
-            # query_prod = text("""
-            # SELECT SUM(units_produced) 
-            # FROM production_log 
-            # WHERE production_date >= CURRENT_DATE - INTERVAL 7 DAY;
-            # """)
-
-            total_downtime_hours = total_downtime_minutes / 60
-
-            print(f"Machine name is --> {machine_name}")
-
-            query_prod = text(f"""
-            SELECT SUM(units_produced) 
-            FROM production_log 
-            WHERE production_date IN (
-                SELECT DISTINCT DATE(last_downtime) 
-                FROM machine_status_2 
-                WHERE machine_name = '{machine_name}' 
-                AND last_downtime >= CURRENT_DATE - INTERVAL 7 DAY
-            );
-            """)
-            actual_prod_data = connection.execute(query_prod)
-            actual_production = actual_prod_data.fetchone()[0] or 0
-
-            # Adjust production drop for this specific machine based on its downtime
-            adjusted_production = actual_production / (total_downtime_hours / 24) if total_downtime_hours > 0 else actual_production
-
-            production_drop = avg_production - adjusted_production
-            impact_report.append(
-                f"📅 Machine {machine_name} had {total_downtime_hours} hours of downtime this week. "
-                f"Production dropped by {production_drop:.2f} units."
-            )
-
-        # cursor.close()
-        # conn.close()
-
-    except Exception as e:
-        return f"Error analyzing production impact: {str(e)}"
-
-    return "\n".join(impact_report)
-
-
-llm = ChatOpenAI(model_name="gpt-4", temperature=0)
-
-explanation_prompt = PromptTemplate(
-    input_variables=["downtime_analysis"],
-    template="""
-    You are an AI assistant for factory operations. Analyze the following downtime report and provide structured insights.
-
-    Downtime Report:
-    {downtime_analysis}
-
-    Provide:
-    1. Summary of downtime issues.
-    2. Possible causes of downtime.
+    Answer:
     """
-
-    # 3. Recommended actions to prevent future downtime.
-)
-
-# Define the function to call the agent
-def explain_downtime(query: str, engine):
-
-    with engine.connect() as connection:
-
-        downtime_analysis = analyze_downtime_impact(connection)
-        response = llm.invoke(explanation_prompt.format(downtime_analysis=downtime_analysis))
-    return response
-
-# Define the agent tool
-downtime_tool = Tool(
-    name="Downtime Impact Analyzer",
-    func=lambda query: explain_downtime(query, engine),
-    description="Analyzes machine downtimes and their impact on production using live database data."
-)
-
-memory = ConversationBufferMemory(memory_key="chat_history")
-
-# Initialize the agent
-agent = initialize_agent(
-    tools=[downtime_tool],
-    llm=llm,
-    agent="zero-shot-react-description",
-    verbose=True,
-    memory=memory
-)
+    # response = openai.ChatCompletion.create(
+    #     model="gpt-4",
+    #     messages=[{"role": "system", "content": "You are an expert in troubleshooting manufacturing machines."},
+    #               {"role": "user", "content": prompt}]
+    # )
 
 
-# Function to handle agent-based queries
-def handle_agent_query(user_question):
-    return agent.run(user_question)
+    #####
+    full_response = ""
 
-handle_agent_query(user_question)
+    for message in llama_client.chat_completion(
+        messages=[{"role": "system", "content": "You are an expert in troubleshooting manufacturing machines."},
+                  {"role": "user", "content": prompt}],
+        max_tokens=500,
+        stream=True):
 
-##############xxxxxxxxxxx###############
+        content = message.choices[0].delta.content
+        full_response += content
+
+    print(full_response)
+
+    return full_response
+
+
+    #####
+
+
+
+
+
+
+    # return response["choices"][0]["message"]["content"]
+
+# Example Query
+test_query = "My Laser Cutter has tool misalignment. What should I do?"
+answer = generate_answer_with_rag(test_query)
+print("\nGenerated Response:", answer)
