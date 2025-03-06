@@ -21,7 +21,7 @@ from openai import OpenAI
 
 #TODO: Classify user question to either query SQL or RAG
 
-user_question = 'Which machine was down for the longest this week and what was the downtime reason?'
+user_question = 'When was pneumatic cylinders last updated in inventory?'
 
 # Which machine was down for the longest last last week and how long in total?
 # How long was each machine down this week/ last week?
@@ -31,6 +31,9 @@ user_question = 'Which machine was down for the longest this week and what was t
 # Which shift produced the most parts last week? What was the date? - change one units_produced to 245 or somet, as all others are 240
 # How many instances of Coolant Leakage in the last week?
 # Which was the most frequently down machine last week?
+# Which machine was down for the longest this week and what was the downtime reason
+# How many hydraulic seals are left and where are they?
+# When was pneumatic cylinders last updated in inventory?
 
 # Which machine downtime had the most impact on units produced last week?
 # The most impactful machine downtime on units produced last week was due to the machine named CNC Lathe-1000, which had a downtime duration of 120 minutes due to excessive vibration, affecting the production on 2023-10-02.
@@ -44,6 +47,9 @@ user_question = 'Which machine was down for the longest this week and what was t
 
 # Agents questions:
 # 'Which machine downtime had the most impact on units produced last week?'
+
+# RAG questions:
+# My Laser Cutter-X5 has lost its paint shine. Why?
 
 
 # Database connection details
@@ -306,7 +312,7 @@ Provide a clear answer:"""
         response = openai_client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are an expert in troubleshooting manufacturing machines."},
+                {"role": "system", "content": "You are an expert in troubleshooting manufacturing machines. If you do not know the answer, say that you don't know, rather than returning false information"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -318,7 +324,7 @@ Provide a clear answer:"""
         return "Error generating response"
 
 # Example Query
-test_query = "My Laser Cutter-X5 has tool misalignment. How to fix it?"
+test_query = "My Laser Cutter-X5 has lost its paint shine. Why?"
 machine_query = "Laser Cutter-X5"
 answer = generate_answer_with_rag(test_query, machine_query)
 print("\nGenerated Response:", answer)
