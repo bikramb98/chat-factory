@@ -23,6 +23,35 @@ from openai import OpenAI
 
 user_question = 'When was pneumatic cylinders last updated in inventory?'
 
+def get_query_type(user_question):
+
+    query_type = ""
+
+    for message in llama_client.chat_completion(
+        messages=[{"role": "system", "content": f"{query_type_sys_prompt}"},
+            {"role": "user", "content": f"{user_question}"}],
+        max_tokens=500,
+        stream=True):
+
+        content = message.choices[0].delta.content
+        query_type += content
+    
+    return query_type
+
+    # print(f"sys prompt: {query_type_sys_prompt}")
+
+    # response = openai_client.chat.completions.create(
+    # model="gpt-4",
+    # messages=[
+    #     {"role": "system", "content": f"{query_type_sys_prompt}"},
+    #     {"role": "user", "content": f"{user_question}"}
+    # ],
+    # temperature=0.7,
+    # max_tokens=500
+    #     )
+
+    # return response
+
 # Which machine was down for the longest last last week and how long in total?
 # How long was each machine down this week/ last week?
 # What was the last machine to have belt misalignment?
@@ -78,6 +107,9 @@ response_prompt = response_prompt_file.read()
 machine_name_sys_prompt_file = open('machine_name_prompt.txt', 'r')
 machine_name_sys_prompt = machine_name_sys_prompt_file.read()
 
+query_type_sys_prompt_file = open('query_type_sys_prompt.txt', 'r')
+query_type_sys_prompt = query_type_sys_prompt_file.read()
+
 # print(sys_prompt)
 
 load_dotenv(find_dotenv())
@@ -94,10 +126,17 @@ client = InferenceClient(
     token=HUGGINGFACE_API_TOKEN,
 )
 
+openai_client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),  # This is the default and can be omitted
+)
+
+query_type = get_query_type(user_question)
+
+print(f'QUERY TYPE IS -------> {query_type}')
+
 full_response = ""
 
 # print(sys_prompt)
-
 
 for message in client.chat_completion(
     messages=[{"role": "system", "content": f"{sys_prompt}"},
@@ -296,9 +335,7 @@ def retrieve_relevant_docs(query, machine_type, k=3):
 #     #####
 #     # return response["choices"][0]["message"]["content"]
 
-openai_client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY"),  # This is the default and can be omitted
-)
+
 
 def generate_answer_with_rag(query, machine_type):
     retrieved_docs = retrieve_relevant_docs(query, machine_type)
