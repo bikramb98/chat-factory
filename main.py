@@ -75,6 +75,9 @@ sys_prompt = sys_prompt_file.read()
 response_prompt_file = open('response_sys_prompt.txt', 'r') 
 response_prompt = response_prompt_file.read()
 
+machine_name_sys_prompt_file = open('machine_name_prompt.txt', 'r')
+machine_name_sys_prompt = machine_name_sys_prompt_file.read()
+
 # print(sys_prompt)
 
 load_dotenv(find_dotenv())
@@ -324,7 +327,32 @@ Provide a clear answer:"""
         return "Error generating response"
 
 # Example Query
-test_query = "My Laser Cutter-X5 has lost its paint shine. Why?"
-machine_query = "Laser Cutter-X5"
+test_query = "The laser cutter has lost its paint shine. Why?"
+
+
+# Get machine query
+
+def get_machine_name(test_query):
+
+    machine_name = ""
+
+    for message in llama_client.chat_completion(
+        messages=[{"role": "system", "content": f"{machine_name_sys_prompt}"},
+            {"role": "user", "content": f"{test_query}"}],
+        max_tokens=500,
+        stream=True):
+
+        content = message.choices[0].delta.content
+        machine_name += content
+
+    return machine_name
+
+
+
+# machine_query = "Laser Cutter-X5"
+machine_query = get_machine_name(test_query)
+
+print(f"Machine query from llama is ------> {machine_query}")
+
 answer = generate_answer_with_rag(test_query, machine_query)
 print("\nGenerated Response:", answer)
