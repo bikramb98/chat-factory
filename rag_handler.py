@@ -1,5 +1,5 @@
 import os
-import fitz
+import PyPDF2
 import faiss
 import numpy as np
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -22,12 +22,22 @@ class RAGQueryHandler:
         self.chunk_registry = {}  # Add this to store chunk sources
         self._initialize_documents()
         
+    # def _extract_text_from_pdf(self, pdf_path):
+    #     """Extract text from PDF file"""
+    #     text = ""
+    #     with fitz.open(pdf_path) as doc:
+    #         for page in doc:
+    #             text += page.get_text("text") + "\n"
+    #     return text
+
     def _extract_text_from_pdf(self, pdf_path):
-        """Extract text from PDF file"""
         text = ""
-        with fitz.open(pdf_path) as doc:
-            for page in doc:
-                text += page.get_text("text") + "\n"
+        with open(pdf_path, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
         return text
     
     def _initialize_documents(self):
