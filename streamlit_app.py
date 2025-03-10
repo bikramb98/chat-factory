@@ -201,10 +201,13 @@ def process_query(query_timestamp, user_question, prompts, log_handler):
     llm_responses = {
         'query_type_response': query_type
     }
+
+    print("Query type --> ", query_type)
     
     if query_type == 'SQL':
         # Handle SQL query
         sql_handler = SQLQueryHandler()
+
         # sql_query = openai_call('gpt-4', prompts['sql_gen'], user_question)
         # sql_query = qwen_call(prompts['sql_gen'], user_question)
 
@@ -225,6 +228,8 @@ def process_query(query_timestamp, user_question, prompts, log_handler):
         sql_query = model_call_failsafe(max_attempts=3, action_name='gen_sql_query', primary_model='Qwen', secondary_model='GPT4', sys_prompt=prompts['sql_gen'], prompt=user_question)
 
         llm_responses['sql_generation'] = sql_query
+
+        print("sql query ", sql_query)
         
         if sql_query:
             result = sql_handler.execute_query(sql_query)
