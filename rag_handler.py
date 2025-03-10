@@ -1,5 +1,6 @@
 import os
 import PyPDF2
+import faiss
 import numpy as np
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
