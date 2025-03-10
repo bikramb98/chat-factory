@@ -104,20 +104,53 @@ def openai_call(model, sys_prompt, user_query):
             temperature=0.7,
             max_tokens=500
         )
-        # print(f"called openai---------------------------- {response.choices[0].message.content}")
+        print(f"OpenAI GPT4 call")
         return response.choices[0].message.content
     except Exception as e:
         st.error(f"Error in OpenAI call: {e}")
         return None
 
-def model_call_failsafe(max_attempts, action_name, primary_model, secondary_model, sys_prompt, prompt, expected):
+# def model_call_failsafe(max_attempts, action_name, primary_model, secondary_model, sys_prompt, prompt):
 
+#     attempts = 0
+
+#     response = None
+    
+#     while attempts < max_attempts:
+#         response = primary_model(sys_prompt, prompt)
+#         if action_name == 'query_type':
+#             if response in ['RAG', 'SQL']:
+#                 break  # Exit loop if valid query type is returned
+#         elif action_name == 'gen_sql_query':
+#             if response:
+#                 break
+#         attempts += 1
+    
+#     # If after 3 attempts the query_type is still not valid, use openai_call
+#     if action_name == 'query_type':
+#         if response not in ['SQL', 'RAG']:
+#             response = secondary_model('gpt-4', sys_prompt, prompt)
+#     elif action_name == 'gen_sql_query':
+#         if not response:
+#             response = secondary_model('gpt-4', sys_prompt, prompt)
+
+#     return response
+
+def model_call_failsafe(max_attempts, action_name, primary_model, secondary_model, sys_prompt, prompt):
     attempts = 0
-
     response = None
     
     while attempts < max_attempts:
-        response = primary_model(sys_prompt, prompt)
+        # Use the appropriate call based on the value of primary_model
+        if primary_model == 'Llama':
+            response = llama_call(sys_prompt, prompt)
+        elif primary_model == 'GPT4':
+            response = openai_call('gpt-4', sys_prompt, prompt)
+        elif primary_model =='Qwen':
+            response = qwen_call(sys_prompt, prompt)
+        else:
+            response = primary_model(sys_prompt, prompt)
+        
         if action_name == 'query_type':
             if response in ['RAG', 'SQL']:
                 break  # Exit loop if valid query type is returned
@@ -126,33 +159,38 @@ def model_call_failsafe(max_attempts, action_name, primary_model, secondary_mode
                 break
         attempts += 1
     
-    # If after 3 attempts the query_type is still not valid, use openai_call
+    # If the response is still invalid after the attempts, use secondary_model as a failsafe
     if action_name == 'query_type':
         if response not in ['SQL', 'RAG']:
-            response = secondary_model('gpt-4', sys_prompt, prompt)
+            if secondary_model == 'GPT4':
+                response = openai_call('gpt-4', sys_prompt, prompt)
     elif action_name == 'gen_sql_query':
         if not response:
-            response = secondary_model('gpt-4', sys_prompt, prompt)
+            if secondary_model == 'GPT4':
+                response = openai_call('gpt-4', sys_prompt, prompt)
 
     return response
+
 
 def process_query(query_timestamp, user_question, prompts, log_handler):
     """Process user query and return response"""
 
     # Attempt to get query type using llama_call up to 3 times
-    max_attempts = 3
-    query_type = None
-    attempts = 0
+    # max_attempts = 3
+    # query_type = None
+    # attempts = 0
     
-    while attempts < max_attempts:
-        query_type = llama_call(prompts['query_type'], user_question)
-        if query_type in ['SQL', 'RAG']:
-            break  # Exit loop if valid query type is returned
-        attempts += 1
+    # while attempts < max_attempts:
+    #     query_type = llama_call(prompts['query_type'], user_question)
+    #     if query_type in ['SQL', 'RAG']:
+    #         break  # Exit loop if valid query type is returned
+    #     attempts += 1
     
-    # If after 3 attempts the query_type is still not valid, use openai_call
-    if query_type not in ['SQL', 'RAG']:
-        query_type = openai_call('gpt-4', prompts['query_type'], user_question)
+    # # If after 3 attempts the query_type is still not valid, use openai_call
+    # if query_type not in ['SQL', 'RAG']:
+    #     query_type = openai_call('gpt-4', prompts['query_type'], user_question)
+
+    query_type = model_call_failsafe(max_attempts=3, action_name='query_type', primary_model='Llama', secondary_model='GPT4', sys_prompt=prompts['query_type'], prompt=user_question)
 
     # query_type = openai_call('gpt-4', prompts['query_type'], user_question)
     # query_type = llama_call(prompts['query_type'], user_question)
@@ -171,18 +209,20 @@ def process_query(query_timestamp, user_question, prompts, log_handler):
         # sql_query = qwen_call(prompts['sql_gen'], user_question)
 
         # Attempt to generate SQL query using qwen_call up to 3 times
-        sql_query = None
-        sql_attempts = 0
+        # sql_query = None
+        # sql_attempts = 0
         
-        while sql_attempts < max_attempts:
-            sql_query = qwen_call(prompts['sql_gen'], user_question)
-            if sql_query:  # Check if a valid SQL query is generated
-                break  # Exit loop if a valid SQL query is returned
-            sql_attempts += 1
+        # while sql_attempts < max_attempts:
+        #     sql_query = qwen_call(prompts['sql_gen'], user_question)
+        #     if sql_query:  # Check if a valid SQL query is generated
+        #         break  # Exit loop if a valid SQL query is returned
+        #     sql_attempts += 1
         
-        # If after 3 attempts the SQL query is still not valid, use openai_call
-        if not sql_query:
-            sql_query = openai_call('gpt-4', prompts['sql_gen'], user_question)
+        # # If after 3 attempts the SQL query is still not valid, use openai_call
+        # if not sql_query:
+        #     sql_query = openai_call('gpt-4', prompts['sql_gen'], user_question)
+
+        sql_query = model_call_failsafe(max_attempts=3, action_name='gen_sql_query', primary_model='Qwen', secondary_model='GPT4', sys_prompt=prompts['sql_gen'], prompt=user_question)
 
         llm_responses['sql_generation'] = sql_query
         
