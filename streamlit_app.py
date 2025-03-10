@@ -42,6 +42,7 @@ def openai_call(model, sys_prompt, user_query):
             temperature=0.7,
             max_tokens=500
         )
+        # print(f"called openai---------------------------- {response.choices[0].message.content}")
         return response.choices[0].message.content
     except Exception as e:
         st.error(f"Error in OpenAI call: {e}")
@@ -49,8 +50,9 @@ def openai_call(model, sys_prompt, user_query):
 
 def process_query(user_question, prompts):
     """Process user query and return response"""
-    # Determine query type
     query_type = openai_call('gpt-4', prompts['query_type'], user_question)
+
+    print('query type', query_type)
     
     if query_type == 'SQL':
         # Handle SQL query
@@ -65,17 +67,31 @@ def process_query(user_question, prompts):
                     f"You are an expert in converting SQL query results into a sentence. {prompts['response']}",
                     f"Question: {user_question}\nSQL Results: {result}"
                 )
-                return response
-            return "No results found for your query."
+                return {
+                    'response': response,
+                    'sources': [{
+                        'file': 'SQL Database',
+                        'similarity': 1.0,
+                        'query': sql_query
+                    }]
+                }
+            return {
+                'response': "No results found for your query.",
+                'sources': []
+            }
     else:
         # Handle RAG query
         rag_handler = RAGQueryHandler()
         machine_name = openai_call("gpt-4", prompts['machine_name'], user_question)
         
         if machine_name:
-            return rag_handler.generate_answer(user_question, machine_name)
+            result = rag_handler.generate_answer(user_question, machine_name)
+            return result
     
-    return "I couldn't process your query. Please try rephrasing it or check if information exists in manual."
+    return {
+        'response': "I couldn't process your query. Please try rephrasing it or check if information exists in manual.",
+        'sources': []
+    }
 
 def main():
     # Load environment variables
@@ -130,9 +146,38 @@ def main():
         # Display assistant response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response = process_query(user_question, prompts)
-                st.write(response)
-        st.session_state.chat_history.append({"role": "assistant", "content": response})
+                result = process_query(user_question, prompts)
+                
+                # Display main response
+                response_text = result['response']
+                st.write(response_text)
+                
+                # Display source information if available
+                if result['sources']:
+                    with st.expander("View Source Information"):
+                        st.markdown("### Reference Sources")
+                        for source in result['sources']:
+                            if 'query' in source:  # SQL source
+                                st.markdown(f"""
+                                **Source**: {source['file']}
+                                **SQL Query**: ```sql
+                                {source['query']}
+                                ```
+                                ---
+                                """)
+                            else:  # RAG source
+                                st.markdown(f"""
+                                **Source**: {source['file']}  
+                                **Similarity Score**: {source['similarity']}  
+                                **Chunk ID**: {source['chunk_id']}
+                                ---
+                                """)
+                
+        st.session_state.chat_history.append({
+            "role": "assistant", 
+            "content": result['response'],
+            "sources": result.get('sources', [])
+        })
 
 if __name__ == "__main__":
     main() 
