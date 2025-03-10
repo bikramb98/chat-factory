@@ -188,9 +188,9 @@ def process_query(query_timestamp, user_question, prompts, log_handler):
     
     # # If after 3 attempts the query_type is still not valid, use openai_call
     # if query_type not in ['SQL', 'RAG']:
-    #     query_type = openai_call('gpt-4', prompts['query_type'], user_question)
+    query_type = openai_call('gpt-4', prompts['query_type'], user_question)
 
-    query_type = model_call_failsafe(max_attempts=3, action_name='query_type', primary_model='Llama', secondary_model='GPT4', sys_prompt=prompts['query_type'], prompt=user_question)
+    # query_type = model_call_failsafe(max_attempts=3, action_name='query_type', primary_model='Llama', secondary_model='GPT4', sys_prompt=prompts['query_type'], prompt=user_question)
 
     # query_type = openai_call('gpt-4', prompts['query_type'], user_question)
     # query_type = llama_call(prompts['query_type'], user_question)
@@ -208,7 +208,7 @@ def process_query(query_timestamp, user_question, prompts, log_handler):
         # Handle SQL query
         sql_handler = SQLQueryHandler()
 
-        # sql_query = openai_call('gpt-4', prompts['sql_gen'], user_question)
+        sql_query = openai_call('gpt-4', prompts['sql_gen'], user_question)
         # sql_query = qwen_call(prompts['sql_gen'], user_question)
 
         # Attempt to generate SQL query using qwen_call up to 3 times
@@ -225,7 +225,7 @@ def process_query(query_timestamp, user_question, prompts, log_handler):
         # if not sql_query:
         #     sql_query = openai_call('gpt-4', prompts['sql_gen'], user_question)
 
-        sql_query = model_call_failsafe(max_attempts=3, action_name='gen_sql_query', primary_model='Qwen', secondary_model='GPT4', sys_prompt=prompts['sql_gen'], prompt=user_question)
+        # sql_query = model_call_failsafe(max_attempts=3, action_name='gen_sql_query', primary_model='GPT4', secondary_model='GPT4', sys_prompt=prompts['sql_gen'], prompt=user_question)
 
         llm_responses['sql_generation'] = sql_query
 
