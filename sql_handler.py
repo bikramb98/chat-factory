@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 import os
 
 class SQLQueryHandler:
-    def __init__(self, config_path="db_config.json"):
+    def __init__(self):
         self.engine = self._create_db_engine()
         
     def _create_db_engine(self):
