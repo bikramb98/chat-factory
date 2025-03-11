@@ -5,18 +5,19 @@ import numpy as np
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
 from openai import OpenAI
+import json
 
 class RAGQueryHandler:
-    def __init__(self, pdf_folder="machine_manuals"):
-        self.pdf_folder = pdf_folder
+    def __init__(self):
+        # Load configuration from config.json
+        with open('configs/asset_name_config.json', 'r') as config_file:
+            asset_name_config = json.load(config_file)
+
+        self.pdf_folder = asset_name_config.get("pdf_folder")
         self.documents = []
         self.document_mappings = {}
         self.metadata_store = []
-        self.machine_names = {
-            "cnc_guide.pdf": "CNC Lathe-1000",
-            "hydraulic_press_guide.pdf": "Hydraulic Press-200",
-            "laser_cutter_guide.pdf": "Laser Cutter-X5"
-        }
+        self.asset_name = asset_name_config.get("asset_name", {})
         self.embedding_model = OpenAIEmbeddings()
         self.openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         self.chunk_registry = {}  # Add this to store chunk sources
@@ -51,7 +52,7 @@ class RAGQueryHandler:
         # Process PDF files
         for file in os.listdir(self.pdf_folder):
             if file.endswith(".pdf"):
-                machine_type = self.machine_names.get(file)
+                asset_type = self.asset_name.get(file)
                 pdf_path = os.path.join(self.pdf_folder, file)
                 
                 extracted_text = self._extract_text_from_pdf(pdf_path)
@@ -59,9 +60,9 @@ class RAGQueryHandler:
                 
                 for chunk in text_chunks:
                     self.documents.append(chunk)
-                    self.document_mappings[chunk_counter] = machine_type
+                    self.document_mappings[chunk_counter] = asset_type
                     self.metadata_store.append({
-                        'machine_type': machine_type,
+                        'asset_type': asset_type,
                         'source_file': file,
                         'chunk_id': chunk_counter
                     })
@@ -69,7 +70,7 @@ class RAGQueryHandler:
                     self.chunk_registry[chunk_counter] = {
                         'content': chunk,
                         'source': file,
-                        'machine_type': machine_type
+                        'asset_type': asset_type
                     }
                     chunk_counter += 1
         
@@ -80,7 +81,7 @@ class RAGQueryHandler:
         self.index = faiss.IndexFlatL2(embeddings.shape[1])
         self.index.add(embeddings)
     
-    def retrieve_relevant_docs(self, query, machine_type, k=3):
+    def retrieve_relevant_docs(self, query, asset_type, k=3):
         """Retrieve relevant documents with similarity scores"""
         query_embedding = self.embedding_model.embed_query(query)
         query_embedding = np.array([query_embedding], dtype="float32")
@@ -88,7 +89,7 @@ class RAGQueryHandler:
         
         retrieved_docs = []
         for score, idx in zip(distances[0], indices[0]):
-            if self.document_mappings[idx] == machine_type:
+            if self.document_mappings[idx] == asset_type:
                 similarity_score = float(1 / (1 + score))  # Convert numpy.float32 to Python float
                 doc_info = {
                     'content': self.documents[idx],
@@ -100,9 +101,9 @@ class RAGQueryHandler:
         
         return retrieved_docs
     
-    def generate_answer(self, query, machine_type):
+    def generate_answer(self, query, asset_type):
         """Generate answer using RAG with source tracking"""
-        retrieved_docs = self.retrieve_relevant_docs(query, machine_type)
+        retrieved_docs = self.retrieve_relevant_docs(query, asset_type)
         
         # Format context with source information
         context_parts = []
@@ -117,7 +118,7 @@ class RAGQueryHandler:
         
         context = "\n".join(context_parts)
         
-        prompt = f"""Given this context about {machine_type}:
+        prompt = f"""Given this context about {asset_type}:
         {context}
 
         Question: {query}

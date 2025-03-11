@@ -7,6 +7,7 @@ from openai import OpenAI
 from datetime import datetime
 from log_handler import LogHandler, QueryLog
 import uuid
+import json
 from huggingface_hub import InferenceClient
 
 # Initialize session state
@@ -19,12 +20,11 @@ if 'current_query_time' not in st.session_state:
 def load_prompts():
     """Load system prompts from files"""
     prompts = {}
-    prompt_files = {
-        'query_type': 'query_type_sys_prompt.txt',
-        'sql_gen': 'system_prompt.txt',
-        'response': 'response_sys_prompt.txt',
-        'machine_name': 'machine_name_prompt.txt'
-    }
+    
+    # Load prompt files from config.json
+    with open('configs/sys_prompts_collection.json', 'r') as config_file:
+        config = json.load(config_file)
+        prompt_files = config['prompt_files']
     
     for key, filename in prompt_files.items():
         try:
@@ -269,11 +269,11 @@ def process_query(query_timestamp, user_question, prompts, log_handler):
     else:
         # Handle RAG query
         rag_handler = RAGQueryHandler()
-        machine_name = openai_call("gpt-4", prompts['machine_name'], user_question)
-        llm_responses['machine_name_detection'] = machine_name
+        asset_name = openai_call("gpt-4", prompts['asset_name'], user_question)
+        llm_responses['asset_name_detection'] = asset_name
         
-        if machine_name:
-            result = rag_handler.generate_answer(user_question, machine_name)
+        if asset_name:
+            result = rag_handler.generate_answer(user_question, asset_name)
             llm_responses['final_response'] = result['response']
             
             # Log the interaction with sources
