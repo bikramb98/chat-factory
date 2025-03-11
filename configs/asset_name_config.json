@@ -1,0 +1,8 @@
+{
+    "asset_name": {
+        "cnc_guide.pdf": "CNC Lathe-1000",
+        "hydraulic_press_guide.pdf": "Hydraulic Press-200",
+        "laser_cutter_guide.pdf": "Laser Cutter-X5"
+    },
+    "pdf_folder": "asset_manuals"
+}
