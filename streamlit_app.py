@@ -40,10 +40,6 @@ def main():
         page_icon="🏭",
         layout="wide"
     )
-
-    db_user = st.secrets["DB_PASSWORD"]
-
-    st.write(db_user)
     
     # Main chat interface
     st.title("🏭 ChatFactory")
