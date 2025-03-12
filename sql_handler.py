@@ -15,6 +15,14 @@ class SQLQueryHandler:
         port = os.environ.get("DB_PORT")
         db_name = os.environ.get("DB_NAME")
 
+        if not all([db_user, db_password, public_ip, port, db_name]):
+            # Get secrets from streamlit secrets
+            db_user = st.secrets["DB_USER"]
+            db_password = st.secrets["DB_PASSWORD"]
+            public_ip = st.secrets["PUBLIC_IP"]
+            port = st.secrets["DB_PORT"]
+            db_name = st.secrets["DB_NAME"]
+
         # if not all([db_user, db_password, public_ip, port, db_name]):
         #     raise ValueError("One or more required database environment variables are missing.")
 
