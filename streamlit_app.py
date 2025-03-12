@@ -41,7 +41,7 @@ def main():
         layout="wide"
     )
 
-    db_user = st.secrets["DB_USER"]
+    db_user = st.secrets["DB_PASSWORD"]
 
     st.write(db_user)
     
