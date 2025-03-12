@@ -5,12 +5,22 @@ import streamlit as st
 
 class ModelService:
     def __init__(self):
-        self.openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_TOKEN"))
+
+        openai_token = os.environ.get("OPENAI_API_TOKEN")
+        if not openai_token:
+            openai_token = st.secrets["OPENAI_API_TOKEN"]
+    
+        self.openai_client = OpenAI(api_key=openai_token)
     
     def qwen_call(self, sys_prompt, query):
+
+        token = os.environ.get("HUGGINGFACE_TOKEN")
+        if not token:
+            token = st.secrets["HUGGINGFACE_TOKEN"]
+
         client = InferenceClient(
             "Qwen/Qwen2.5-Coder-32B-Instruct",
-            token=os.environ.get("HUGGINGFACE_TOKEN"),
+            token=token,
         )
 
         response = ""
@@ -25,9 +35,14 @@ class ModelService:
         return response
 
     def llama_call(self, sys_prompt, query):
+
+        token = os.environ.get("HUGGINGFACE_TOKEN")     
+        if not token:
+            token = st.secrets["HUGGINGFACE_TOKEN"]
+
         client = InferenceClient(
             "meta-llama/Meta-Llama-3-8B-Instruct",
-            token=os.environ.get("HUGGINGFACE_TOKEN"),
+            token=token,
         )
 
         response = ""
