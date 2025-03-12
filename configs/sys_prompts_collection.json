@@ -3,6 +3,7 @@
         "query_type": "system_prompts/query_type_sys_prompt.txt",
         "sql_gen": "system_prompts/sql_gen_prompt.txt",
         "response": "system_prompts/response_sys_prompt.txt",
-        "asset_name": "system_prompts/asset_name_prompt.txt"
+        "asset_name": "system_prompts/asset_name_prompt.txt",
+        "sql_results_conversion": "system_prompts/sql_results_conversion.txt"
     }
 }
