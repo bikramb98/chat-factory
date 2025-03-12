@@ -19,17 +19,58 @@ class RAGQueryHandler:
         self.metadata_store = []
         self.asset_name = asset_name_config.get("asset_name", {})
         self.embedding_model = OpenAIEmbeddings()
-        self.openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        openai_token = os.environ.get("OPENAI_API_TOKEN")
+        if not openai_token:
+            openai_token = st.secrets["OPENAI_API_TOKEN"]
+        self.openai_client = OpenAI(api_key=openai_token)
         self.chunk_registry = {}  # Add this to store chunk sources
-        self._initialize_documents()
+
+        # Add paths for saved data
+        self.index_path = "saved_data/faiss_index.index"
+        self.data_path = "saved_data/embeddings_data.json"
         
-    # def _extract_text_from_pdf(self, pdf_path):
-    #     """Extract text from PDF file"""
-    #     text = ""
-    #     with fitz.open(pdf_path) as doc:
-    #         for page in doc:
-    #             text += page.get_text("text") + "\n"
-    #     return text
+        # Try to load existing index and data, if not found, initialize from PDFs
+        if os.path.exists(self.index_path) and os.path.exists(self.data_path):
+            self._load_saved_data()
+        else:
+            self._initialize_documents()
+            self._save_data()
+            print("Initialized and saved data")        
+
+    def _save_data(self):
+        """Save FAISS index and related data to files"""
+        # Create directory if it doesn't exist
+        os.makedirs("saved_data", exist_ok=True)
+        
+        # Save FAISS index
+        faiss.write_index(self.index, self.index_path)
+        
+        # Save related data
+        data_to_save = {
+            'documents': self.documents,
+            'document_mappings': self.document_mappings,
+            'metadata_store': self.metadata_store,
+            'chunk_registry': self.chunk_registry
+        }
+        with open(self.data_path, 'w') as f:
+            json.dump(data_to_save, f)
+
+    def _load_saved_data(self):
+        """Load FAISS index and related data from files"""
+        # Load FAISS index
+        self.index = faiss.read_index(self.index_path)
+        
+        # Load related data
+        with open(self.data_path, 'r') as f:
+            loaded_data = json.load(f)
+            
+        self.documents = loaded_data['documents']
+        self.document_mappings = {int(k): v for k, v in loaded_data['document_mappings'].items()}
+        self.metadata_store = loaded_data['metadata_store']
+        self.chunk_registry = loaded_data['chunk_registry']
+
+        print("Loaded saved data")
+
 
     def _extract_text_from_pdf(self, pdf_path):
         text = ""
@@ -43,6 +84,18 @@ class RAGQueryHandler:
     
     def _initialize_documents(self):
         """Initialize document embeddings"""
+        # Check for PDF folder changes
+        current_pdfs = set(f for f in os.listdir(self.pdf_folder) if f.endswith(".pdf"))
+        
+        if os.path.exists(self.data_path):
+            with open(self.data_path, 'r') as f:
+                loaded_data = json.load(f)
+                processed_pdfs = set(meta['source_file'] for meta in loaded_data['metadata_store'])
+            
+            if current_pdfs == processed_pdfs:
+                self._load_saved_data()
+                return
+
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
             chunk_overlap=100
