@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, text
 import json
 from typing import Optional, Dict, Any
 import os
+import streamlit as st
 
 class SQLQueryHandler:
     def __init__(self):
