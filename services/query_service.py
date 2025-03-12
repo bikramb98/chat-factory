@@ -52,7 +52,7 @@ class QueryService:
                 if result:
                     response = self.model_service.openai_call(
                         'gpt-4',
-                        f"You are an expert in converting SQL query results into a sentence. {self.prompts['response']}",
+                        self.prompts['sql_results_conversion'],
                         f"Question: {user_question}\nSQL Results: {result}"
                     )
                     llm_responses['final_response'] = response
