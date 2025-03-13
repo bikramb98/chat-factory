@@ -5,7 +5,7 @@ machine_status_2 - Tracks machine downtime.
    - `id` (INT) - Unique ID for the database table
    - `machine_name` (TEXT) - Contains values: 'CNC Lathe-1000', 'Hydraulic Press-200', 'Laser Cutter-X5'
    - `last_downtime` (DATE) – Represents when a machine last had an issue.
-   - `downtime_duration` (INT) – The duration (in minutes) the machine was down.
+   - `downtime_duration` (INT) – The duration the machine was down in minutes
    - `issue_description` (TEXT) – Contains values: 'Coolant leakage', 'Overheating motor', 'Tool misalignment', 'Excessive vibration'
 
 production_log - Stores production details.
