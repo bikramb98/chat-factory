@@ -1,0 +1,25 @@
+@startuml
+
+start
+
+:User submits query;
+
+:LLM classifies query as 'SQL' or 'RAG' (LLM Call #1);
+
+if (Is query classified as 'SQL'?) then (Yes)
+    :Generate SQL query using system prompt (LLM Call #2);
+    :Execute SQL query on database;
+    :Retrieve data from database;
+    :Format SQL response using system prompt (LLM Call #3);
+    :Show response to user;
+else (No)
+    :Extract text from relevant documents;
+    :Chunk and embed documents;
+    :Retrieve most relevant document chunks;
+    :Generate response using LLM with retrieved context (LLM Call #2);
+    :Show response to user with sources;
+endif
+
+stop
+
+@enduml
