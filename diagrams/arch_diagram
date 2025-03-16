@@ -17,6 +17,7 @@ graph TD;
     end
 
     subgraph "Document Processing"
+        PDFMonitor["📡 PDF Change Detector"];
         PDFProcessor["📄 PDF Processor"];
         TextChunking["🔍 Text Chunking & Embedding"];
         VectorSearch["🗂️ Vector Search (FAISS)"];
@@ -30,10 +31,13 @@ graph TD;
     SQLDatabase --> SQLResponseFormatter;
     SQLResponseFormatter -->|Return Response| APIGateway;
 
-    RequestRouter -- If RAG --> PDFProcessor;
-    PDFProcessor --> TextChunking;
-    TextChunking --> VectorSearch;
+    RequestRouter -- If RAG --> VectorSearch;
     VectorSearch --> RAGAnswerGen;
     RAGAnswerGen -->|Return Response| APIGateway;
 
+    %% Ensure PDF processing happens only on changes
+    PDFMonitor -- If new or modified PDF --> PDFProcessor;
+    PDFProcessor --> TextChunking;
+    TextChunking --> VectorSearch;
+    
     APIGateway -->|Shows Response| User;
