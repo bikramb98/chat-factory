@@ -1,0 +1,42 @@
+@startuml
+actor User
+
+rectangle "Orchestration Layer" {
+	[API Gateway]
+	[Request Router]
+}
+
+rectangle "LLM Service" {
+	[Query Classifier (LLM Call #1)]
+	[SQL Query Generator (LLM Call #2)]
+	[SQL Response Formatter (LLM Call #3)]
+	[RAG Answer Generator (LLM Call #2)]
+}
+
+rectangle "Database" {
+	[SQL Database]
+}
+
+rectangle "Document Processing" {
+	[PDF Processor]
+	[Text Chunking & Embedding]
+	[Vector Search (FAISS)]
+}
+
+User --> [API Gateway] : Submits query
+[API Gateway] --> [Query Classifier (LLM Call #1)] : Classify 'SQL' or 'RAG'
+[Query Classifier (LLM Call #1)] --> [Request Router]
+
+[Request Router] --> [SQL Query Generator (LLM Call #2)] : If SQL
+[SQL Query Generator (LLM Call #2)] --> [SQL Database] : Run Query
+[SQL Database] --> [SQL Response Formatter (LLM Call #3)]
+[SQL Response Formatter (LLM Call #3)] --> [API Gateway] : Return Response
+
+[Request Router] --> [PDF Processor] : If RAG
+[PDF Processor] --> [Text Chunking & Embedding]
+[Text Chunking & Embedding] --> [Vector Search (FAISS)]
+[Vector Search (FAISS)] --> [RAG Answer Generator (LLM Call #2)]
+[RAG Answer Generator (LLM Call #2)] --> [API Gateway] : Return Response
+
+[API Gateway] --> User : Shows Response
+@enduml

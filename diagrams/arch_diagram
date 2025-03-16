@@ -1,0 +1,39 @@
+graph TD;
+    User["👤 User"] -->|Submits query| APIGateway["🛡️ API Gateway"];
+    
+    subgraph "Orchestration Layer"
+        APIGateway --> RequestRouter["🔀 Request Router"];
+    end
+
+    subgraph "LLM Service"
+        QueryClassifier["🤖 Query Classifier (LLM Call #1)"];
+        SQLQueryGen["📝 SQL Query Generator (LLM Call #2)"];
+        SQLResponseFormatter["📝 SQL Response Formatter (LLM Call #3)"];
+        RAGAnswerGen["📚 RAG Answer Generator (LLM Call #2)"];
+    end
+
+    subgraph "Database"
+        SQLDatabase["🗄️ SQL Database"];
+    end
+
+    subgraph "Document Processing"
+        PDFProcessor["📄 PDF Processor"];
+        TextChunking["🔍 Text Chunking & Embedding"];
+        VectorSearch["🗂️ Vector Search (FAISS)"];
+    end
+
+    APIGateway -->|Classify 'SQL' or 'RAG'| QueryClassifier;
+    QueryClassifier --> RequestRouter;
+
+    RequestRouter -- If SQL --> SQLQueryGen;
+    SQLQueryGen -->|Run Query| SQLDatabase;
+    SQLDatabase --> SQLResponseFormatter;
+    SQLResponseFormatter -->|Return Response| APIGateway;
+
+    RequestRouter -- If RAG --> PDFProcessor;
+    PDFProcessor --> TextChunking;
+    TextChunking --> VectorSearch;
+    VectorSearch --> RAGAnswerGen;
+    RAGAnswerGen -->|Return Response| APIGateway;
+
+    APIGateway -->|Shows Response| User;
