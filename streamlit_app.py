@@ -6,14 +6,14 @@ from datetime import datetime
 from services.model_service import ModelService
 from services.query_service import QueryService
 
-# Initialize session state
+# Init session state
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
 if 'current_query_time' not in st.session_state:
     st.session_state.current_query_time = None
 
-# Initialize services only once using session state
+# Init services only once using session state
 if 'services' not in st.session_state:
     load_dotenv(find_dotenv())
     sql_handler = SQLQueryHandler()
